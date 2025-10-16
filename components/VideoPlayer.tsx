@@ -132,7 +132,7 @@ export function VideoPlayer({
       controls: 0,
       modestbranding: 1,
       rel: 0,
-      origin: 'https://youtubewatchparty.netlify.app',
+      origin: 'https://youtubewatchparty.netlify.app/',
     },
   };
 
