@@ -117,7 +117,7 @@ export function VideoPlayer({
 
   const handleSkip = (seconds: number) => {
     if (playerRef.current) {
-      playerRef.current.getCurrentTime().then((time) => {
+      playerRef.current.getCurrentTime().then((time: number) => {
         const newTime = Math.max(0, time + seconds);
         onSeek?.(newTime);
       });

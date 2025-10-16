@@ -195,13 +195,16 @@ export function useRoom(roomId: string | null, userName: string) {
           filter: `key=like.room:${roomId}%`
         },
         (payload) => {
-          // Refresh data when any change occurs
-          if (payload.new.key === `room:${roomId}`) {
-            fetchRoomData();
-          } else if (payload.new.key.includes(':message:')) {
-            fetchMessages();
-          } else if (payload.new.key.includes(':user:')) {
-            fetchUsers();
+          if ('key' in payload.new && typeof payload.new.key === 'string') 
+          {
+            // Refresh data when any change occurs
+            if (payload.new.key === `room:${roomId}`) {
+              fetchRoomData();
+            } else if (payload.new.key.includes(':message:')) {
+              fetchMessages();
+            } else if (payload.new.key.includes(':user:')) {
+              fetchUsers();
+            }
           }
         }
       )
