@@ -7,7 +7,7 @@ import { Input } from './components/ui/input';
 import { Button } from './components/ui/button';
 import { Card } from './components/ui/card';
 import { useRoom } from './hooks/useRoom';
-import { projectId, publicAnonKey } from './utils/supabase/info';
+import { projectId, publicAnonKey } from './utils/supabase/info.tsx';
 
 const MAIN_ROOM_ID = 'main';
 
