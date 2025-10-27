@@ -1,4 +1,149 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { createClient, RealtimeChannel } from '@supabase/supabase-js';
+import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { Message, User, VideoState } from '../types'; // 통합된 타입 사용
+
+// Supabase 클라이언트 초기화
+const supabaseUrl = `https://${projectId}.supabase.co`;
+const supabase = createClient(supabaseUrl, publicAnonKey);
+
+// 커스텀 훅 정의
+export function useRoom(roomId: string | null, userName: string) {
+  // 상태 변수 정의
+  const [videoState, setVideoState] = useState<VideoState>({
+    id: roomId || 'main',
+    video_id: 'dQw4w9WgXcQ', // 기본 비디오 ID
+    is_playing: false,
+    current_time: 0,
+    last_update: new Date().toISOString(),
+  });  
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [isConnected, setIsConnected] = useState(false);
+
+  // [수정] 비디오 상태 업데이트 함수
+  const updateVideoState = useCallback(async (updates: Partial<VideoState>) => {
+    if (!roomId) return;
+    
+    // fetch 대신 Supabase 클라이언트를 직접 사용하여 'rooms' 테이블 업데이트
+    const { error } = await supabase
+      .from('rooms')
+      .update({ ...updates, last_update: new Date().toISOString() })
+      .eq('id', roomId);
+
+    if (error) console.error('Error updating video state:', error);
+  }, [roomId]);
+
+  // [수정] 메시지 보내기 함수
+  const sendMessage = useCallback(async (text: string) => {
+    if (!roomId || !userName || !text.trim()) return;
+
+    // fetch 대신 Supabase 클라이언트를 직접 사용하여 'messages' 테이블에 삽입
+    const { error } = await supabase.from('messages').insert({
+      room_id: roomId,
+      user: userName,
+      text: text.trim(),
+    });
+
+    if (error) console.error('Error sending message:', error);
+  }, [roomId, userName]);
+
+  // [수정] Realtime 구독 및 Presence 로직
+  useEffect(() => {
+    if (!roomId || !userName) return;
+
+    let channel: RealtimeChannel;
+
+    // 초기 데이터 로드 및 Realtime 채널 설정
+    const setupRoom = async () => {
+      // 1. 초기 비디오 상태 및 메시지 로드
+      const [roomRes, messagesRes] = await Promise.all([
+        supabase.from('rooms').select('*').eq('id', roomId).single(),
+        supabase.from('messages').select('*').eq('room_id', roomId).order('timestamp', { ascending: true })
+      ]);
+
+      if (roomRes.data) setVideoState(roomRes.data);
+      if (messagesRes.data) setMessages(messagesRes.data);
+
+      // 2. Realtime 채널 생성
+      channel = supabase.channel(`room:${roomId}`, {
+        config: {
+          presence: {
+            key: userName, // 각 사용자를 이름으로 식별
+          },
+        },
+      });
+
+      // 3. 비디오 상태(rooms 테이블) 변경 구독
+      channel.on<VideoState>(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` },
+        (payload) => {
+          console.log('Video state updated!', payload.new);
+          setVideoState(payload.new);
+        }
+      );
+
+      // 4. 메시지(messages 테이블) 추가 구독
+      channel.on<Message>(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages', filter: `room_id=eq.${roomId}` },
+        (payload) => {
+          console.log('New message received!', payload.new);
+          setMessages((prev) => [...prev, payload.new]);
+        }
+      );
+
+      // 5. 사용자 목록(Presence) 구독
+      channel.on('presence', { event: 'sync' }, () => {
+        const presenceState = channel.presenceState<User>();
+        const userList = Object.keys(presenceState)
+          .map((presenceId) => {
+            const presences = presenceState[presenceId] as unknown as User[];
+            return presences[0];
+          })
+          .filter(Boolean); // undefined 제거
+        setUsers(userList);
+      });
+      
+      // 6. 채널 최종 구독 및 내 상태 알리기
+      channel.subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          setIsConnected(true);
+          // 내가 방에 참여했음을 알림 (다른 사람들에게 내 정보가 보임)
+          const { data: { session } } = await supabase.auth.getSession();
+          const userId = session?.user.id || userName; // user.id가 없으면 userName을 고유값으로 사용
+          await channel.track({
+            id: userId,
+            name: userName,
+            status: 'watching',
+          });
+        }
+      });
+    };
+
+    setupRoom();
+
+    // 컴포넌트 언마운트 시 채널 구독 해제
+    return () => {
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
+  }, [roomId, userName]);
+
+  // 훅이 반환하는 값들
+  return {
+    videoState,
+    messages,
+    users,
+    isConnected,
+    updateVideoState,
+    sendMessage,
+  };
+}
+
+/*import { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { projectId, publicAnonKey } from '../utils/supabase/info.tsx';
 
@@ -244,3 +389,4 @@ export function useRoom(roomId: string | null, userName: string) {
     sendMessage,
   };
 }
+*/

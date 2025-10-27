@@ -3,27 +3,23 @@ import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { ScrollArea } from './ui/scroll-area';
 import { Send } from 'lucide-react';
-
-interface Message {
-  id: string;
-  user: string;
-  text: string;
-  timestamp: number;
-}
+import { Message } from '../types';
 
 interface ChatBoxProps {
   currentUser: string;
   messages: Message[];
-  onSendMessage: (text: string) => void;
+  onSendMessage: (text: string) => Promise<void>;
 }
 
 export function ChatBox({ currentUser, messages, onSendMessage }: ChatBoxProps) {
   const [inputMessage, setInputMessage] = useState('');
-  const scrollRef = useRef<HTMLDivElement>(null);
-
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    const viewport = scrollAreaRef.current;
+    if (viewport) {
+      setTimeout(() =>{
+        viewport.scrollTop = viewport.scrollHeight;
+      }, 0);
     }
   }, [messages]);
 
@@ -41,7 +37,7 @@ export function ChatBox({ currentUser, messages, onSendMessage }: ChatBoxProps) 
     }
   };
 
-  const formatTime = (timestamp: number) => {
+  const formatTime = (timestamp: string) => {
     return new Date(timestamp).toLocaleTimeString('ko-KR', { 
       hour: '2-digit', 
       minute: '2-digit' 
@@ -49,17 +45,17 @@ export function ChatBox({ currentUser, messages, onSendMessage }: ChatBoxProps) 
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full overflow-hidden">
       <div className="p-4 border-b">
         <h3>채팅</h3>
       </div>
       
-      <ScrollArea className="flex-1 p-4">
-        <div ref={scrollRef} className="space-y-3">
+      <ScrollArea className="flex-1 p-4 h-0" ref={scrollAreaRef}>
+        <div className="flex flex-col gap-4">
           {messages.map((message) => (
             <div key={message.id} className="flex flex-col gap-1">
               <div className="flex items-baseline gap-2">
-                <span className={message.user === currentUser ? 'text-blue-600' : 'text-gray-700'}>
+                <span className={message.user === currentUser ? 'text-blue-600 font-semibold' : 'text-gray-700'}>
                   {message.user}
                 </span>
                 <span className="text-xs text-gray-400">

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { VideoPlayer } from './components/VideoPlayer';
 import { ChatBox } from './components/ChatBox';
 import { UserList } from './components/UserList';
@@ -7,7 +7,6 @@ import { Input } from './components/ui/input';
 import { Button } from './components/ui/button';
 import { Card } from './components/ui/card';
 import { useRoom } from './hooks/useRoom';
-import { projectId, publicAnonKey } from './utils/supabase/info.tsx';
 
 const MAIN_ROOM_ID = 'main';
 
@@ -17,37 +16,6 @@ export default function App() {
   const [inputName, setInputName] = useState('');
 
   const { videoState, messages, users, isConnected, updateVideoState, sendMessage } = useRoom(MAIN_ROOM_ID, userName);
-
-  const serverUrl = `https://${projectId}.supabase.co/functions/v1/make-server-cce49a7b`;
-
-  // Initialize main room if it doesn't exist
-  useEffect(() => {
-    const initializeRoom = async () => {
-      try {
-        const response = await fetch(`${serverUrl}/room/${MAIN_ROOM_ID}`, {
-          headers: {
-            'Authorization': `Bearer ${publicAnonKey}`
-          }
-        });
-
-        if (!response.ok) {
-          // Room doesn't exist, create it
-          await fetch(`${serverUrl}/room/create-fixed`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${publicAnonKey}`
-            },
-            body: JSON.stringify({ roomId: MAIN_ROOM_ID })
-          });
-        }
-      } catch (error) {
-        console.error('Error initializing room:', error);
-      }
-    };
-
-    initializeRoom();
-  }, [serverUrl]);
 
   const handleSetName = () => {
     if (inputName.trim()) {
@@ -63,19 +31,23 @@ export default function App() {
   };
 
   const handleVideoChange = (videoId: string) => {
-    updateVideoState({ videoId, isPlaying: false, currentTime: 0 });
+    updateVideoState({ video_id: videoId, is_playing: false, current_time: 0 });
   };
 
   const handlePlay = () => {
-    updateVideoState({ isPlaying: true });
+    updateVideoState({ is_playing: true });
   };
 
-  const handlePause = () => {
-    updateVideoState({ isPlaying: false });
+  const handlePause = (time: number) => {
+    updateVideoState({ is_playing: false, current_time: time });
   };
 
   const handleSeek = (time: number) => {
-    updateVideoState({ currentTime: time });
+    updateVideoState({ current_time: time });
+  };
+
+  const handleTimeUpdate = (time: number) => {
+    updateVideoState({ current_time: time});
   };
 
   return (
@@ -113,13 +85,15 @@ export default function App() {
           <div className="lg:col-span-3 space-y-4">
             <Card className="p-4">
               <VideoPlayer 
-                videoId={videoState.videoId}
-                isPlaying={videoState.isPlaying}
-                currentTime={videoState.currentTime}
+                key={videoState.video_id}
+                video_id={videoState.video_id}
+                is_playing={videoState.is_playing}
+                current_time={videoState.current_time}
                 onVideoChange={handleVideoChange}
                 onPlay={handlePlay}
                 onPause={handlePause}
                 onSeek={handleSeek}
+                onTimeUpdate={handleTimeUpdate}
                 isSynced={isConnected}
               />
             </Card>

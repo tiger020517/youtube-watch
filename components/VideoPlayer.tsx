@@ -4,31 +4,45 @@ import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { Play, Pause, SkipBack, SkipForward, Tv } from 'lucide-react';
 import { Badge } from './ui/badge';
+import { Slider } from './ui/slider';
 
 interface VideoPlayerProps {
-  videoId: string;
-  isPlaying: boolean;
-  currentTime: number;
+  video_id: string;
+  is_playing: boolean;
+  current_time: number;
   onVideoChange?: (videoId: string) => void;
   onPlay?: () => void;
-  onPause?: () => void;
+  onPause?: (currentTime: number) => void;
   onSeek?: (time: number) => void;
+  onTimeUpdate?: (time: number) => void;
   isSynced?: boolean;
 }
 
 export function VideoPlayer({ 
-  videoId, 
-  isPlaying, 
-  currentTime,
+  video_id: videoId, 
+  is_playing: isPlaying, 
+  current_time: currentTime,
   onVideoChange, 
   onPlay, 
   onPause,
   onSeek,
+  onTimeUpdate,
   isSynced = true
 }: VideoPlayerProps) {
   const [videoUrl, setVideoUrl] = useState('');
   const playerRef = useRef<YouTubePlayer | null>(null);
   const [isReady, setIsReady] = useState(false);
+
+  const [localCurrentTime, setLocalCurrentTime] = useState(currentTime);
+  const [videoDuration, setVideoDuration] = useState(0);
+  const [isSeeking, setIsSeeking] = useState(false);
+
+  const formatTime = (seconds: number): string => {
+    if (isNaN(seconds) || seconds < 0) return '00:00';
+    const date = new Date(0);
+    date.setSeconds(seconds);
+    return date.toISOString().substr(14, 5);
+  }
 
   const extractVideoId = (url: string): string | null => {
     const patterns = [
@@ -59,8 +73,10 @@ export function VideoPlayer({
     }
   };
 
-  const onPlayerReady: YouTubeProps['onReady'] = (event) => {
+  const onPlayerReady: YouTubeProps['onReady'] = async (event) => {
     playerRef.current = event.target;
+    const duration = await event.target.getDuration();
+    setVideoDuration(duration);
     setIsReady(true);
   };
 
@@ -69,7 +85,13 @@ export function VideoPlayer({
     if (event.data === 1 && !isPlaying) {
       onPlay?.();
     } else if (event.data === 2 && isPlaying) {
-      onPause?.();
+      playerRef.current?.getCurrentTime().then((time: number) => {
+        setLocalCurrentTime(time);
+        onPause?.(time || 0);
+      });
+    } else if (event.data === 0) {
+      onPause?.(videoDuration);
+      setLocalCurrentTime(videoDuration);
     }
   };
 
@@ -92,7 +114,7 @@ export function VideoPlayer({
 
   // Sync current time
   useEffect(() => {
-    if (!playerRef.current || !isReady) return;
+    if (!playerRef.current || !isReady || isSeeking) return;
 
     const syncTime = async () => {
       const currentPlayerTime = await playerRef.current!.getCurrentTime();
@@ -102,14 +124,44 @@ export function VideoPlayer({
       if (timeDiff > 2) {
         playerRef.current!.seekTo(currentTime, true);
       }
+      else if (!isPlaying && timeDiff > 0.5) {
+        playerRef.current!.seekTo(currentTime, true);
+        setLocalCurrentTime(currentTime);
+      }
     };
-
     syncTime();
-  }, [currentTime, isReady]);
+  }, [currentTime, isReady, isPlaying, isSeeking]);
 
-  const handlePlayPause = () => {
+  useEffect(() => {
+    if (!isReady || !isPlaying || !onTimeUpdate || isSeeking) return ;
+
+    const intervalId = setInterval(async () => {
+      if (playerRef.current) {
+        const time = await playerRef.current.getCurrentTime();
+        onTimeUpdate(time);
+      }
+    }, 3000)
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [isReady, isPlaying, onTimeUpdate, isSeeking]);
+
+  useEffect(() => {
+    if (!isReady || !isPlaying || !playerRef.current) return;
+
+    const intervalId = setInterval(async () => {
+      if (!isSeeking) {
+        const time = await playerRef.current!.getCurrentTime();
+        setLocalCurrentTime(time);
+      }
+    }, 500);
+    return () => clearInterval(intervalId);
+  }, [isReady, isPlaying, isSeeking]);
+
+  const handlePlayPause = async () => {
     if (isPlaying) {
-      onPause?.();
+      const currentTime = await playerRef.current?.getCurrentTime();
+      onPause?.(currentTime || 0);
     } else {
       onPlay?.();
     }
@@ -119,9 +171,26 @@ export function VideoPlayer({
     if (playerRef.current) {
       playerRef.current.getCurrentTime().then((time: number) => {
         const newTime = Math.max(0, time + seconds);
+        playerRef.current?.seekTo(newTime, true);
+        setLocalCurrentTime(newTime);
         onSeek?.(newTime);
       });
     }
+  };
+
+  /** 사용자가 슬라이더를 드래그하는 동안 호출됩니다. */
+  const handleSeekChange = (value: number[]) => {
+    setIsSeeking(true); // '잡고 있음' 상태로 변경
+    setLocalCurrentTime(value[0]); // UI만 즉시 업데이트
+  };
+
+  /** 사용자가 슬라이더를 놓거나 클릭했을 때 호출됩니다. */
+  const handleSeekCommit = (value: number[]) => {
+    const newTime = value[0];
+    setLocalCurrentTime(newTime);
+    playerRef.current?.seekTo(newTime, true); // 내 플레이어 즉시 이동
+    onSeek?.(newTime); // 서버(다른 사용자)에게 동기화 요청
+    setIsSeeking(false); // '놓음' 상태로 변경
   };
 
   const opts: YouTubeProps['opts'] = {
@@ -132,7 +201,7 @@ export function VideoPlayer({
       controls: 0,
       modestbranding: 1,
       rel: 0,
-      origin: 'https://youtubewatchparty.netlify.app',
+      origin: window.location.origin,
     },
   };
 
@@ -169,6 +238,24 @@ export function VideoPlayer({
             className="w-full h-full"
           />
         </div>
+      </div>
+
+      <div className="flex items-center gap-2 px-1">
+        <span className="text-sm text-gray-700 w-12 text-center">
+          {formatTime(localCurrentTime)}
+        </span>
+        <Slider
+          value={[localCurrentTime]}
+          max={videoDuration}
+          step={1}
+          onValueChange={handleSeekChange} // 드래그 중
+          onValueCommit={handleSeekCommit} // 드래그 완료
+          disabled={!isReady}
+          className="flex-1"
+        />
+        <span className="text-sm text-gray-700 w-12 text-center">
+          {formatTime(videoDuration)}
+        </span>
       </div>
 
       <div className="flex items-center justify-center gap-2">
