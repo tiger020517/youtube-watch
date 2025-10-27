@@ -3,31 +3,33 @@
 import * as React from "react";
 import * as ScrollAreaPrimitive from "@radix-ui/react-scroll-area";
 
-import { cn } from "./utils";
+// ⬇️ 1. 경로 수정: 방금 만든 utils.ts 파일을 바라보게 합니다.
+import { cn } from "../../lib/utils";
 
-function ScrollArea({
-  className,
-  children,
-  ...props
-}: React.ComponentProps<typeof ScrollAreaPrimitive.Root>) {
-  return (
-    <ScrollAreaPrimitive.Root
-      data-slot="scroll-area"
-      className={cn("relative", className)}
-      {...props}
+// ⬇️ 2. React.forwardRef로 감싸고, ref 타입을 Viewport로 지정합니다.
+const ScrollArea = React.forwardRef<
+  React.ElementRef<typeof ScrollAreaPrimitive.Viewport>,
+  React.ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.Root>
+>(({ className, children, ...props }, ref) => ( // ⬇️ 3. ref를 prop으로 받습니다.
+  <ScrollAreaPrimitive.Root
+    data-slot="scroll-area"
+    className={cn("relative", className)}
+    {...props}
+  >
+    <ScrollAreaPrimitive.Viewport
+      data-slot="scroll-area-viewport"
+      className="focus-visible:ring-ring/50 size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:outline-1"
+      ref={ref} // 👈 ✅ 4. ref를 Viewport에 연결합니다.
     >
-      <ScrollAreaPrimitive.Viewport
-        data-slot="scroll-area-viewport"
-        className="focus-visible:ring-ring/50 size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:outline-1"
-      >
-        {children}
-      </ScrollAreaPrimitive.Viewport>
-      <ScrollBar />
-      <ScrollAreaPrimitive.Corner />
-    </ScrollAreaPrimitive.Root>
-  );
-}
+      {children}
+    </ScrollAreaPrimitive.Viewport>
+    <ScrollBar />
+    <ScrollAreaPrimitive.Corner />
+  </ScrollAreaPrimitive.Root>
+));
+ScrollArea.displayName = ScrollAreaPrimitive.Root.displayName; // ⬇️ 5. displayName 추가
 
+// --- ScrollBar 코드는 동일 ---
 function ScrollBar({
   className,
   orientation = "vertical",
@@ -54,5 +56,6 @@ function ScrollBar({
     </ScrollAreaPrimitive.ScrollAreaScrollbar>
   );
 }
+// ------------------------------
 
 export { ScrollArea, ScrollBar };
